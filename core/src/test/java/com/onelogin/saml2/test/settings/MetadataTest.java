@@ -22,6 +22,7 @@ import javax.xml.xpath.XPathExpressionException;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 import org.apache.xml.security.exceptions.XMLSecurityException;
 import org.junit.Test;
 
@@ -519,5 +520,68 @@ public class MetadataTest {
 		assertEquals("should set valid until attribute", Util.formatDateTime(validUntil.getTimeInMillis()), validUntilNode.getTextContent());
 		assertNull("should not set cache duration attribute", cacheDurationNode);
 
+	}
+
+	/**
+	 * Test with certificateLineLength set to default value (64), which
+	 * should result in a certificate string with enters after every 64 characters.
+	 */
+	@Test
+	public void encodeCertificateWithDefautlLineLength() throws CertificateEncodingException, Error, IOException, XPathExpressionException {
+		//given
+		Saml2Settings saml2Settings = getSettingFromAllProperties();
+
+		//when
+		Metadata metadata = new Metadata(saml2Settings);
+		String metadataString = metadata.getMetadataString();
+
+		//then
+		Document metadataSignedDoc = Util.loadXML(metadataString);
+
+		NodeList certs = Util.query(
+			metadataSignedDoc,
+			"/md:EntityDescriptor/md:SPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate"
+		);
+
+		int expectedCertificateCount = 4;
+		assertEquals("There should be 4 certificates", certs.getLength(), expectedCertificateCount);
+
+		for (int i = 0; i < expectedCertificateCount; i++) {
+			String certificate = certs.item(i).getTextContent();
+
+			assertEquals("The certificate should be spread of a number of lines", certificate.split("\n").length, 14);
+			assertEquals("Each line should be 64 characters", certificate.indexOf("\n"), 64);
+		}
+	}
+
+	/**
+	 * Test with certificateLineLength set to 0, which should result in a certificate string without enters.
+	 */
+	@Test
+	public void encodeCertificateWithoutEnters() throws CertificateEncodingException, Error, IOException, XPathExpressionException {
+		//given
+		Saml2Settings saml2Settings = getSettingFromAllProperties();
+
+		//when
+		Calendar validUntil = Calendar.getInstance();
+		Metadata metadata = new Metadata(saml2Settings, validUntil, null, null, 0);
+		String metadataString = metadata.getMetadataString();
+
+		//then
+		Document metadataSignedDoc = Util.loadXML(metadataString);
+
+		NodeList certs = Util.query(
+			metadataSignedDoc,
+			"/md:EntityDescriptor/md:SPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate"
+		);
+
+		int expectedCertificateCount = 4;
+		assertEquals("There should be 4 certificates", certs.getLength(), expectedCertificateCount);
+
+		for (int i = 0; i < expectedCertificateCount; i++) {
+			String certificate = certs.item(i).getTextContent();
+
+			assertEquals("The certificate should not contain any enters", certificate.indexOf("\n"), -1);
+		}
 	}
 }

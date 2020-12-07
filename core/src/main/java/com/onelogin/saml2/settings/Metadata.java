@@ -41,6 +41,7 @@ public class Metadata {
 	// Constants
 	private static final int N_DAYS_VALID_UNTIL = 2;
 	private static final int SECONDS_CACHED = 604800; // 1 week
+	private static final int CERTIFICATE_LINE_LENGTH = 64;
 
 	/**
      * AttributeConsumingService
@@ -63,6 +64,40 @@ public class Metadata {
 	private final Integer cacheDuration;
 
 	/**
+	 * Line length to use for formatting base64 encoded certificates.
+	 * @see org.apache.commons.codec.binary.Base64#Base64(int)
+	 */
+	private final int certificateLineLength;
+
+	/**
+	 * Constructs the Metadata object.
+	 *
+	 * @param settings                  Saml2Settings object. Setting data
+	 * @param validUntilTime            Metadata's valid time
+	 * @param cacheDuration             Duration of the cache in seconds
+	 * @param attributeConsumingService AttributeConsumingService of service provider
+	 * @param certificateLineLength     Line length to use for formatting base64 encoded certificates.
+	 * @throws CertificateEncodingException
+	 */
+	public Metadata(Saml2Settings settings,
+					Calendar validUntilTime,
+					Integer cacheDuration,
+					AttributeConsumingService attributeConsumingService,
+					int certificateLineLength) throws CertificateEncodingException {
+
+		this.validUntilTime = validUntilTime;
+		this.attributeConsumingService = attributeConsumingService;
+		this.cacheDuration = cacheDuration;
+		this.certificateLineLength = certificateLineLength;
+
+		StrSubstitutor substitutor = generateSubstitutor(settings);
+		String unsignedMetadataString = substitutor.replace(getMetadataTemplate());
+
+		LOGGER.debug("metadata --> " + unsignedMetadataString);
+		metadataString = unsignedMetadataString;
+	}
+
+	/**
 	 * Constructs the Metadata object.
 	 *
 	 * @param settings                  Saml2Settings object. Setting data
@@ -72,15 +107,7 @@ public class Metadata {
 	 * @throws CertificateEncodingException
 	 */
 	public Metadata(Saml2Settings settings, Calendar validUntilTime, Integer cacheDuration, AttributeConsumingService attributeConsumingService) throws CertificateEncodingException {
-		this.validUntilTime = validUntilTime;
-		this.attributeConsumingService = attributeConsumingService;
-		this.cacheDuration = cacheDuration;
-
-		StrSubstitutor substitutor = generateSubstitutor(settings);
-		String unsignedMetadataString = substitutor.replace(getMetadataTemplate());
-
-		LOGGER.debug("metadata --> " + unsignedMetadataString);
-		metadataString = unsignedMetadataString;
+		this(settings, validUntilTime, cacheDuration, attributeConsumingService, CERTIFICATE_LINE_LENGTH);
 	}
 
 	/**
@@ -92,7 +119,7 @@ public class Metadata {
 	 * @throws CertificateEncodingException
 	 */
 	public Metadata(Saml2Settings settings, Calendar validUntilTime, Integer cacheDuration) throws CertificateEncodingException {
-		this(settings, validUntilTime, cacheDuration, null);
+		this(settings, validUntilTime, cacheDuration, null, CERTIFICATE_LINE_LENGTH);
 	}
 
 	/**
@@ -102,17 +129,7 @@ public class Metadata {
 	 * @throws CertificateEncodingException
 	 */
 	public Metadata(Saml2Settings settings) throws CertificateEncodingException {
-
-		this.validUntilTime = Calendar.getInstance();
-		this.validUntilTime.add(Calendar.DAY_OF_YEAR, N_DAYS_VALID_UNTIL);
-
-		this.cacheDuration = SECONDS_CACHED;
-
-		StrSubstitutor substitutor = generateSubstitutor(settings);
-		String unsignedMetadataString = substitutor.replace(getMetadataTemplate());
-
-		LOGGER.debug("metadata --> " + unsignedMetadataString);
-		metadataString = unsignedMetadataString;
+		this(settings, getInstancePlusDays(N_DAYS_VALID_UNTIL), SECONDS_CACHED, null, CERTIFICATE_LINE_LENGTH);
 	}
 
 	/**
@@ -309,7 +326,7 @@ public class Metadata {
 		List<X509Certificate> certs = Arrays.asList(certCurrent, certNew);
 		for(X509Certificate cert : certs) {
 		    if (cert != null) {
-	            Base64 encoder = new Base64(64);
+	            Base64 encoder = new Base64(certificateLineLength);
 	            byte[] encodedCert = cert.getEncoded();
 	            String certString = new String(encoder.encode(encodedCert));
 
@@ -388,5 +405,14 @@ public class Metadata {
 		String signedMetadata = Util.addSign(metadataDoc, key, cert, signAlgorithm, digestAlgorithm);
 		LOGGER.debug("Signed metadata --> " + signedMetadata);
 		return signedMetadata;
+	}
+
+	/**
+	 * Returns current timestamp plus the specified number of days.
+	 */
+	private static Calendar getInstancePlusDays(int days) {
+		Calendar instance = Calendar.getInstance();
+		instance.add(Calendar.DAY_OF_YEAR, days);
+		return instance;
 	}
 }
